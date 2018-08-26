@@ -1,0 +1,6 @@
+import * from 'craftr'
+import cxx from 'cxx'
+project('lprod', '1.0-0')
+target('main')
+properties({'cxx.srcs': ['src/main.cpp'], 'cxx.enableOpenmp': True})
+cxx.build()
