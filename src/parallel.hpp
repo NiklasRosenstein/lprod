@@ -103,11 +103,10 @@ namespace parallel
     FUNC&& fn,
     DISTRIBUTION_POLICY policy={})
   {
+    results.clear();
     if (data.empty()) {
       return;
     }
-
-    results.clear();
 
     size_t batch_size = std::max<size_t>(1, std::min(policy.batch_size(data.size()), data.size()));
     size_t num_threads = std::max<size_t>(1, std::min(data.size() / batch_size, policy.num_parallel_threads()));
