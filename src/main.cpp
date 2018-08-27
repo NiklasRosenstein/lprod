@@ -22,27 +22,116 @@
  * SOFTWARE.
  */
 
+#include <cstring>
 #include <iostream>
 #include "lsystem.hpp"
 #include "timer.hpp"
 
 
-int main()
+int stoi_whole(char const* str)
 {
-  lsystem L;
-  L.define_rule('A', "B-A-B");
-  L.define_rule('B', "A+B+A");
+  try {
+    size_t s;
+    int n = std::stoi(str, &s);
+    if (s != strlen(str)) throw std::invalid_argument("");
+    return n;
+  }
+  catch (std::invalid_argument) {
+    throw std::invalid_argument("not a number");
+  }
+}
 
-  std::vector<int> result;
-  std::vector<int> axiom;
-  axiom.push_back('A');
 
-  timer t;
-  for (int i = 0; i < 13; ++i) {
-    L.produce_parallel(result, axiom);
-    std::swap(result, axiom);
+void pop_arg(int& argc, char**(& argv), int& i)
+{
+  for (int j = i+1; j < argc; ++j) {
+    argv[j-1] = argv[j];
+  }
+  argc--;
+  i--;
+}
+
+
+std::ostream& operator << (std::ostream& s, std::vector<int> const& v)
+{
+  return s << std::string(v.begin(), v.end());
+}
+
+
+[[noreturn]]
+void usage(int code, char const* fatal_msg=nullptr)
+{
+  printf("usage: lprod [rule [rule [...]] axiom n [--each] [--no-prod] [--time]\n");
+  if (fatal_msg) {
+    printf("fatal: %s\n", fatal_msg);
+  }
+  exit(code);
+}
+
+
+int main(int argc, char** argv)
+{
+  --argc, ++argv;
+
+  if (argc == 0) usage(0);
+  if (argc == 1) usage(1);
+
+  bool each = false;
+  bool time = false;
+  bool no_prod = false;
+
+  for (int i = 0; i < argc; ++i) {
+    if (strcmp(argv[i], "--each") == 0) {
+      each = true;
+    }
+    else if (strcmp(argv[i], "--time") == 0) {
+      time = true;
+    }
+    else if (strcmp(argv[i], "--no-prod") == 0) {
+      no_prod = true;
+    }
+    else continue;
+    pop_arg(argc, argv, i);
   }
 
-  std::cout << std::string(axiom.begin(), axiom.end()) << "\n";
+  // Parse L-System rules and flags from the command-line.
+  lsystem L;
+  for (; argc > 2; --argc, ++argv) {
+    if (strchr(*argv, '=') != *argv+1) {
+      usage(1, "invalid rule");
+    }
+    L.define_rule(**argv, (*argv)+2);
+  }
+
+  // Parse axiom.
+  std::vector<int> prod(*argv, *argv + strlen(*argv));
+  --argc, ++argv;
+
+  // Parse number of iterations.
+  int n;
+  try { n = stoi_whole(*argv); }
+  catch (std::invalid_argument e) { usage(1, e.what()); }
+
+  // Generate L-System production.
+  std::vector<int> temp;
+  long ms_sum = 0;
+  for (int i = 0; i < n; ++i) {
+    timer t1;
+    L.produce_parallel(temp, prod);
+    long ms = t1.elapsed();
+    ms_sum += ms;
+    std::swap(temp, prod);
+    if (!no_prod && (each || i == (n-1))) {
+      std::cout << prod << "\n";
+    }
+    if (each && time) {
+      std::cerr << "time (" << i << "): " << (double) ms / 1000.0 << "s" << std::endl;
+    }
+  }
+
+  if (time) {
+    std::cerr << "time(all): " << (double) ms_sum / 1000.0 << "s" << std::endl;
+  }
+
   return 0;
 }
