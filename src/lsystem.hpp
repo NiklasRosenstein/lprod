@@ -29,61 +29,115 @@
 #include "parallel.hpp"
 
 
-struct lsystem
+namespace lsystem
 {
 
-  std::unordered_map<int, std::vector<int>> rules;
-
-  inline void define_rule(int var, std::vector<int>&& production)
+  struct rule
   {
-    rules[var] = std::forward<std::vector<int>>(production);
-  }
+    std::vector<int> subst;
 
-  inline void define_rule(int var, std::string const& production)
-  {
-    rules[var] = {production.begin(), production.end()};
-  }
+    inline rule() { }
 
-  template <typename It>
-  inline void produce(std::vector<int>& result, It axiom_begin, It axiom_end) const
+    inline rule(std::vector<int>&& subst_) : subst(std::forward<std::vector<int>>(subst_)) { }
+
+    inline rule(std::string const& subst_) : subst(subst_.begin(), subst_.end()) { }
+
+    inline void append_to(std::vector<int>& v) const
+    {
+      v.insert(v.end(), subst.begin(), subst.end());
+    }
+  };
+
+  struct rule_interface
   {
-    result.clear();
-    for (auto it = axiom_begin; it != axiom_end; ++it) {
-      auto rule = rules.find(*it);
-      if (rule == rules.end()) {
-        result.push_back(*it);
-      }
-      else {
-        auto& production = rule->second;
-        result.insert(result.end(), production.begin(), production.end());
+    virtual ~rule_interface() { }
+    virtual void append_to(std::vector<int>&) = 0;
+  };
+
+  template <typename RuleImpl>
+  struct rule_wrapper : rule_interface
+  {
+    using rule_impl = RuleImpl;
+
+    rule_impl impl;
+
+    inline rule_wrapper() : impl{} { }
+
+    template <typename... Args>
+    inline rule_wrapper(Args&&... args) : impl(std::forward<Args>(args)...) { }
+
+    virtual ~rule_wrapper() { }
+
+    virtual void append_to(std::vector<int>& v) override
+    {
+      impl.append_to(v);
+    }
+
+    virtual rule_impl* operator * () { return &impl; }
+
+    virtual rule_impl const* operator * () const { return &impl; }
+  };
+
+  template <typename RuleType>
+  struct lsystem
+  {
+
+    using rule_type = RuleType;
+
+    std::unordered_map<int, rule_type> rules;
+
+    inline void define_rule(int variable, rule_type&& r)
+    {
+      rules[variable] = std::forward<rule_type>(r);
+    }
+
+    template <typename... Args>
+    inline void define_rule(int variable, Args&&... args)
+    {
+      rules[variable] = rule_type(std::forward<Args>(args)...);
+    }
+
+    template <typename It>
+    inline void produce(std::vector<int>& result, It axiom_begin, It axiom_end) const
+    {
+      result.clear();
+      for (auto it = axiom_begin; it != axiom_end; ++it) {
+        auto rule = rules.find(*it);
+        if (rule == rules.end()) {
+          result.push_back(*it);
+        }
+        else {
+          rule->second.append_to(result);
+        }
       }
     }
-  }
 
-  inline void produce(std::vector<int>& result, std::vector<int> const& axiom) const
-  {
-    produce(result, axiom.begin(), axiom.end());
-  }
+    inline void produce(std::vector<int>& result, std::vector<int> const& axiom) const
+    {
+      produce(result, axiom.begin(), axiom.end());
+    }
 
-  inline void produce(std::vector<int>& result, std::string const& axiom) const
-  {
-    produce(result, axiom.begin(), axiom.end());
-  }
+    inline void produce(std::vector<int>& result, std::string const& axiom) const
+    {
+      produce(result, axiom.begin(), axiom.end());
+    }
 
-  inline void produce_parallel(std::vector<int>& result, std::vector<int> const& axiom) const
-  {
-    parallel::batch_transform(
-      result,
-      axiom,
-      [this] (auto begin, auto end) {
-        std::vector<int> partial_result;
-        this->produce(partial_result, begin, end);
-        return partial_result;
-      },
-      parallel::distribution_policy()
-        .with_min_batch_size(8)
-        .with_max_batch_size(4098)
-    );
-  }
+    inline void produce_parallel(std::vector<int>& result, std::vector<int> const& axiom) const
+    {
+      parallel::batch_transform(
+        result,
+        axiom,
+        [this] (auto begin, auto end) {
+          std::vector<int> partial_result;
+          this->produce(partial_result, begin, end);
+          return partial_result;
+        },
+        parallel::distribution_policy()
+          .with_min_batch_size(8)
+          .with_max_batch_size(4098)
+      );
+    }
 
-};
+  };
+
+} // namespace lsystem

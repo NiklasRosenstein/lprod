@@ -95,7 +95,7 @@ int main(int argc, char** argv)
   }
 
   // Parse L-System rules and flags from the command-line.
-  lsystem L;
+  lsystem::lsystem<lsystem::rule> L;
   for (; argc > 2; --argc, ++argv) {
     if (strchr(*argv, '=') != *argv+1) {
       usage(1, "invalid rule");
